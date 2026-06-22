@@ -29,12 +29,14 @@ All flags can also be set via environment variables or a `.env` file:
 
 | Flag                | Env var            | Default                      |
 |---------------------|--------------------|------------------------------|
-| `--watch-dir`       | `WATCH_DIR`        | *(required)*                 |
-| `--redis-host`      | `REDIS_HOST`       | `localhost`                  |
-| `--redis-port`      | `REDIS_PORT`       | `6379`                       |
-| `--redis-key-prefix`| `REDIS_KEY_PREFIX` | `file_cache:`                |
-| `--pid-file`        | `PID_FILE`         | `/tmp/folder_syncer.pid`     |
-| `--log-file`        | `LOG_FILE`         | `/tmp/folder_syncer.log`     |
+| `--watch-dir`       | `SYNC_WATCH_DIR`        | *(required)*                 |
+| `--redis-host`      | `SYNC_REDIS_HOST`       | `localhost`                  |
+| `--redis-port`      | `SYNC_REDIS_PORT`       | `6379`                       |
+| `--redis-key-prefix`| `SYNC_REDIS_KEY_PREFIX` | `file_cache:`                |
+| `--redis-password`  | `SYNC_REDIS_PASSWORD`   | ``                           |
+| `--redis-db`        | `SYNC_REDIS_DB`         | `0`                          |
+| `--pid-file`        | `SYNC_PID_FILE`         | `/tmp/folder_syncer.pid`     |
+| `--log-file`        | `SYNC_LOG_FILE`         | `/tmp/folder_syncer.log`     |
 
 ## Test
 
