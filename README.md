@@ -5,6 +5,9 @@ Go reimplementation of the Python `folder_syncer` project.
 Watches a local directory and syncs every file's content to Redis (base64-encoded).
 On startup it restores any cached files from Redis back to disk.
 
+## Why?
+If you had a Dockerised service (or similar service) that, for any reason, could not use a volume and needed a folder to persist between runs, this service can help you.
+
 ## Requirements
 
 - Go 1.22+
