@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/sanay/go_redis_folder_syncer/internal/app"
 	"github.com/sanay/go_redis_folder_syncer/internal/config"
@@ -64,8 +63,7 @@ func runStart(_ *cobra.Command, _ []string) error {
 	// Guard against a double-start.
 	pid, err := daemon.ReadPID(cfg.PIDFile)
 	if err == nil && daemon.IsRunning(pid) {
-		fmt.Fprintf(os.Stderr, "already running (PID %d)\n", pid)
-		os.Exit(1)
+		return fmt.Errorf("already running (PID %d)", pid)
 	}
 
 	// Daemonize unless --fg was passed or we are already the daemon child.

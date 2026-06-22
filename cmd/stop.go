@@ -28,8 +28,7 @@ func runStop(_ *cobra.Command, _ []string) error {
 	}
 
 	if !daemon.IsRunning(pid) {
-		fmt.Fprintln(os.Stderr, "daemon is not running")
-		os.Exit(1)
+		return fmt.Errorf("daemon is not running")
 	}
 
 	proc, err := os.FindProcess(pid)

@@ -20,6 +20,7 @@ type RedisClient interface {
 	HSet(ctx context.Context, key string, values ...interface{}) *redis.IntCmd
 	HGetAll(ctx context.Context, key string) *redis.MapStringStringCmd
 	Del(ctx context.Context, keys ...string) *redis.IntCmd
+	// NOTE: KEYS is O(N) and blocks Redis. Consider migrating to SCAN in production.
 	Keys(ctx context.Context, pattern string) *redis.StringSliceCmd
 }
 
@@ -28,7 +29,6 @@ type Service struct {
 	cfg    *config.Config
 	logger *slog.Logger
 	redis  RedisClient
-	ctx    context.Context
 }
 
 // New constructs a Service with its dependencies injected.
@@ -37,7 +37,6 @@ func New(cfg *config.Config, logger *slog.Logger, client RedisClient) *Service {
 		cfg:    cfg,
 		logger: logger,
 		redis:  client,
-		ctx:    context.Background(),
 	}
 }
 
@@ -69,15 +68,12 @@ func (s *Service) SyncFile(filePath string) {
 		return
 	}
 
-	encoded := base64.StdEncoding.EncodeToString(data)
 	key := s.redisKey(absPath)
-
-	mtime := strconv.FormatFloat(float64(info.ModTime().Unix()), 'f', 1, 64)
-	if err := s.redis.HSet(s.ctx, key,
+	if err := s.redis.HSet(context.Background(), key,
 		"filename", filepath.Base(absPath),
 		"size_bytes", strconv.FormatInt(info.Size(), 10),
-		"mtime", mtime,
-		"content_stub", encoded,
+		"mtime", strconv.FormatInt(info.ModTime().Unix(), 10),
+		"content", base64.StdEncoding.EncodeToString(data),
 	).Err(); err != nil {
 		s.logger.Error("redis HSet failed", "path", absPath, "err", err)
 		return
@@ -95,7 +91,7 @@ func (s *Service) RemoveFile(filePath string) {
 	}
 
 	key := s.redisKey(absPath)
-	if err := s.redis.Del(s.ctx, key).Err(); err != nil {
+	if err := s.redis.Del(context.Background(), key).Err(); err != nil {
 		s.logger.Error("redis Del failed", "path", absPath, "err", err)
 		return
 	}
@@ -113,7 +109,7 @@ func (s *Service) LoadAndRestore() {
 	}
 
 	pattern := s.cfg.RedisKeyPrefix + "*"
-	keys, err := s.redis.Keys(s.ctx, pattern).Result()
+	keys, err := s.redis.Keys(context.Background(), pattern).Result()
 	if err != nil {
 		s.logger.Error("redis Keys failed", "pattern", pattern, "err", err)
 		return
@@ -133,7 +129,7 @@ func (s *Service) LoadAndRestore() {
 }
 
 func (s *Service) restoreOne(key, physicalPath string) {
-	metadata, err := s.redis.HGetAll(s.ctx, key).Result()
+	metadata, err := s.redis.HGetAll(context.Background(), key).Result()
 	if err != nil || len(metadata) == 0 {
 		return
 	}
@@ -153,7 +149,7 @@ func (s *Service) restoreOne(key, physicalPath string) {
 		return
 	}
 
-	decoded, err := base64.StdEncoding.DecodeString(metadata["content_stub"])
+	decoded, err := base64.StdEncoding.DecodeString(metadata["content"])
 	if err != nil {
 		s.logger.Error("base64 decode failed", "path", physicalPath, "err", err)
 		return
@@ -168,9 +164,8 @@ func (s *Service) restoreOne(key, physicalPath string) {
 
 	// Restore the original modification time.
 	if mtimeStr, ok := metadata["mtime"]; ok {
-		if mtimeF, err := strconv.ParseFloat(mtimeStr, 64); err == nil {
-			mtime := time.Unix(int64(mtimeF), 0)
-			_ = os.Chtimes(physicalPath, time.Now(), mtime)
+		if mtime, err := strconv.ParseInt(mtimeStr, 10, 64); err == nil {
+			_ = os.Chtimes(physicalPath, time.Now(), time.Unix(mtime, 0))
 		}
 	}
 }

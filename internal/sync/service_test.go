@@ -106,8 +106,8 @@ func TestSyncFile_StoresCorrectFields(t *testing.T) {
 	if fields["size_bytes"] != strconv.Itoa(len(content)) {
 		t.Errorf("size_bytes: got %q, want %d", fields["size_bytes"], len(content))
 	}
-	if fields["content_stub"] != base64.StdEncoding.EncodeToString(content) {
-		t.Error("content_stub mismatch")
+	if fields["content"] != base64.StdEncoding.EncodeToString(content) {
+		t.Error("content mismatch")
 	}
 }
 
@@ -136,7 +136,7 @@ func TestSyncFile_BinaryContentPreserved(t *testing.T) {
 
 	abs, _ := filepath.Abs(f)
 	key := "file_cache:" + abs
-	encoded := mock.store[key]["content_stub"]
+	encoded := mock.store[key]["content"]
 	decoded, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		t.Fatal(err)
@@ -195,10 +195,10 @@ func TestLoadAndRestore_RestoresMissingFile(t *testing.T) {
 	mock := newMockRedis()
 	mock.keys_ = []string{"file_cache:" + physicalPath}
 	mock.store["file_cache:"+physicalPath] = map[string]string{
-		"filename":     "restored.txt",
-		"size_bytes":   strconv.Itoa(len(content)),
-		"mtime":        "1700000000.0",
-		"content_stub": base64.StdEncoding.EncodeToString(content),
+		"filename":   "restored.txt",
+		"size_bytes": strconv.Itoa(len(content)),
+		"mtime":      "1700000000",
+		"content":    base64.StdEncoding.EncodeToString(content),
 	}
 
 	svc := newService(t, watch, mock)
@@ -251,10 +251,10 @@ func TestLoadAndRestore_OverwritesFileWithDifferentSize(t *testing.T) {
 	mock := newMockRedis()
 	mock.keys_ = []string{"file_cache:" + target}
 	mock.store["file_cache:"+target] = map[string]string{
-		"filename":     "changed.txt",
-		"size_bytes":   strconv.Itoa(len(newContent)),
-		"mtime":        "1700000000.0",
-		"content_stub": base64.StdEncoding.EncodeToString(newContent),
+		"filename":   "changed.txt",
+		"size_bytes": strconv.Itoa(len(newContent)),
+		"mtime":      "1700000000",
+		"content":    base64.StdEncoding.EncodeToString(newContent),
 	}
 
 	svc := newService(t, watch, mock)
@@ -279,24 +279,24 @@ func TestLoadAndRestore_SetsMtimeAfterRestore(t *testing.T) {
 	watch := filepath.Join(tmp, "watch")
 	target := filepath.Join(watch, "ts.txt")
 	content := []byte("timestamped")
-	expectedMtime := float64(1_700_000_000)
+	const expectedMtime int64 = 1_700_000_000
 
 	mock := newMockRedis()
 	mock.keys_ = []string{"file_cache:" + target}
 	mock.store["file_cache:"+target] = map[string]string{
-		"filename":     "ts.txt",
-		"size_bytes":   strconv.Itoa(len(content)),
-		"mtime":        strconv.FormatFloat(expectedMtime, 'f', 1, 64),
-		"content_stub": base64.StdEncoding.EncodeToString(content),
+		"filename":   "ts.txt",
+		"size_bytes": strconv.Itoa(len(content)),
+		"mtime":      strconv.FormatInt(expectedMtime, 10),
+		"content":    base64.StdEncoding.EncodeToString(content),
 	}
 
 	svc := newService(t, watch, mock)
 	svc.LoadAndRestore()
 
 	gotMtime := mustStat(t, target).ModTime().Unix()
-	diff := gotMtime - int64(expectedMtime)
+	diff := gotMtime - expectedMtime
 	if diff < -1 || diff > 1 {
-		t.Errorf("mtime %d differs from expected %d by more than 1s", gotMtime, int64(expectedMtime))
+		t.Errorf("mtime %d differs from expected %d by more than 1s", gotMtime, expectedMtime)
 	}
 }
 

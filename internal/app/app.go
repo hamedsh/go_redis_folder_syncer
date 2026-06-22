@@ -17,9 +17,7 @@ import (
 	syncsvc "github.com/sanay/go_redis_folder_syncer/internal/sync"
 )
 
-// BuildLogger creates a structured logger that writes to stdout and,
-// optionally, to a log file.
-func BuildLogger(logFile string) (*slog.Logger, func(), error) {
+func buildLogger(logFile string) (*slog.Logger, func(), error) {
 	writers := []io.Writer{os.Stdout}
 	var closeFuncs []func()
 
@@ -45,8 +43,7 @@ func BuildLogger(logFile string) (*slog.Logger, func(), error) {
 	return logger, cleanup, nil
 }
 
-// BuildRedisClient constructs a go-redis client from configuration.
-func BuildRedisClient(cfg *config.Config) *redis.Client {
+func buildRedisClient(cfg *config.Config) *redis.Client {
 	return redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%d", cfg.RedisHost, cfg.RedisPort),
 		Password: cfg.RedisPassword,
@@ -57,17 +54,13 @@ func BuildRedisClient(cfg *config.Config) *redis.Client {
 // Run is the core sync loop: restore from Redis, then watch for changes.
 // It blocks until a signal is received.
 func Run(cfg *config.Config) error {
-	if cfg.WatchDir == "" {
-		return fmt.Errorf("watch-dir is required")
-	}
-
-	logger, cleanup, err := BuildLogger(cfg.LogFile)
+	logger, cleanup, err := buildLogger(cfg.LogFile)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
 
-	redisClient := BuildRedisClient(cfg)
+	redisClient := buildRedisClient(cfg)
 	defer redisClient.Close()
 
 	// Verify Redis connectivity early.

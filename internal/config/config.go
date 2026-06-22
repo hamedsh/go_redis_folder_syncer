@@ -28,62 +28,63 @@ func Load(envFile string, overrides *Config) (*Config, error) {
 	// best-effort: ignore "file not found"
 	_ = godotenv.Load(envFile)
 
+	env := func(key, fallback string) string {
+		if v := os.Getenv(key); v != "" {
+			return v
+		}
+		return fallback
+	}
+	envInt := func(key string, fallback int) int {
+		if v := os.Getenv(key); v != "" {
+			if i, err := strconv.Atoi(v); err == nil {
+				return i
+			}
+		}
+		return fallback
+	}
+
 	cfg := &Config{
-		WatchDir:       getEnv("SYNC_WATCH_DIR", ""),
-		RedisHost:      getEnv("SYNC_REDIS_HOST", "localhost"),
-		RedisPort:      getEnvInt("SYNC_REDIS_PORT", 6379),
-		RedisPassword:  getEnv("SYNC_REDIS_PASSWORD", ""),
-		RedisDb:        getEnvInt("SYNC_REDIS_DB", 0),
-		RedisKeyPrefix: getEnv("SYNC_REDIS_KEY_PREFIX", "file_cache:"),
-		PIDFile:        getEnv("SYNC_PID_FILE", "/tmp/folder_syncer.pid"),
-		LogFile:        getEnv("SYNC_LOG_FILE", "/tmp/folder_syncer.log"),
+		WatchDir:       env("SYNC_WATCH_DIR", ""),
+		RedisHost:      env("SYNC_REDIS_HOST", "localhost"),
+		RedisPort:      envInt("SYNC_REDIS_PORT", 6379),
+		RedisPassword:  env("SYNC_REDIS_PASSWORD", ""),
+		RedisDb:        envInt("SYNC_REDIS_DB", 0),
+		RedisKeyPrefix: env("SYNC_REDIS_KEY_PREFIX", "file_cache:"),
+		PIDFile:        env("SYNC_PID_FILE", "/tmp/folder_syncer.pid"),
+		LogFile:        env("SYNC_LOG_FILE", "/tmp/folder_syncer.log"),
 	}
 
-	if overrides == nil {
-		return cfg, nil
-	}
-
-	// CLI-provided values win over env-file values.
-	if overrides.WatchDir != "" {
-		cfg.WatchDir = overrides.WatchDir
-	}
-	if overrides.RedisHost != "" {
-		cfg.RedisHost = overrides.RedisHost
-	}
-	if overrides.RedisPort != 0 {
-		cfg.RedisPort = overrides.RedisPort
-	}
-	if overrides.RedisDb != 0 {
-		cfg.RedisDb = overrides.RedisDb
-	}
-	if overrides.RedisPassword != "" {
-		cfg.RedisPassword = overrides.RedisPassword
-	}
-	if overrides.RedisKeyPrefix != "" {
-		cfg.RedisKeyPrefix = overrides.RedisKeyPrefix
-	}
-	if overrides.PIDFile != "" {
-		cfg.PIDFile = overrides.PIDFile
-	}
-	if overrides.LogFile != "" {
-		cfg.LogFile = overrides.LogFile
-	}
-
+	mergeOverrides(cfg, overrides)
 	return cfg, nil
 }
 
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+// mergeOverrides copies non-zero fields from src into dst.
+func mergeOverrides(dst, src *Config) {
+	if src == nil {
+		return
 	}
-	return fallback
-}
-
-func getEnvInt(key string, fallback int) int {
-	if v := os.Getenv(key); v != "" {
-		if i, err := strconv.Atoi(v); err == nil {
-			return i
-		}
+	if src.WatchDir != "" {
+		dst.WatchDir = src.WatchDir
 	}
-	return fallback
+	if src.RedisHost != "" {
+		dst.RedisHost = src.RedisHost
+	}
+	if src.RedisPort != 0 {
+		dst.RedisPort = src.RedisPort
+	}
+	if src.RedisPassword != "" {
+		dst.RedisPassword = src.RedisPassword
+	}
+	if src.RedisDb != 0 {
+		dst.RedisDb = src.RedisDb
+	}
+	if src.RedisKeyPrefix != "" {
+		dst.RedisKeyPrefix = src.RedisKeyPrefix
+	}
+	if src.PIDFile != "" {
+		dst.PIDFile = src.PIDFile
+	}
+	if src.LogFile != "" {
+		dst.LogFile = src.LogFile
+	}
 }
