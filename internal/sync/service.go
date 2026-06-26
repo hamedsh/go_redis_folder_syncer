@@ -4,6 +4,7 @@ package sync
 import (
 	"context"
 	"encoding/base64"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -45,6 +46,9 @@ func (s *Service) redisKey(filePath string) string {
 	return s.cfg.RedisKeyPrefix + filepath.Clean(filepath.ToSlash(filePath))
 }
 
+const syncMaxRetries = 5
+const syncRetryDelay = 50 * time.Millisecond
+
 // SyncFile upserts file metadata and base64-encoded content into Redis.
 func (s *Service) SyncFile(filePath string) {
 	absPath, err := filepath.Abs(filePath)
@@ -53,25 +57,55 @@ func (s *Service) SyncFile(filePath string) {
 		return
 	}
 
-	info, err := os.Stat(absPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return // file already gone — nothing to sync
-		}
-		s.logger.Error("stat failed", "path", absPath, "err", err)
-		return
-	}
+	var (
+		data     []byte
+		info     os.FileInfo
+		prevSize int64 = -1
+	)
 
-	data, err := os.ReadFile(absPath)
-	if err != nil {
-		s.logger.Error("sync failed — cannot read file", "path", absPath, "err", err)
-		return
+	for attempt := range syncMaxRetries {
+		f, err := os.Open(absPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return // file already gone — nothing to sync
+			}
+			s.logger.Error("sync failed — cannot open file", "path", absPath, "err", err)
+			return
+		}
+
+		// Stat the *open* fd so metadata and content share the same moment.
+		info, err = f.Stat()
+		if err != nil {
+			_ = f.Close()
+			s.logger.Error("stat failed", "path", absPath, "err", err)
+			return
+		}
+
+		data, err = io.ReadAll(f)
+		_ = f.Close()
+
+		if err != nil {
+			s.logger.Error("sync failed — cannot read file", "path", absPath, "err", err)
+			return
+		}
+
+		currentSize := int64(len(data))
+		if currentSize == prevSize {
+			break // stable snapshot captured
+		}
+
+		prevSize = currentSize
+		if attempt < syncMaxRetries-1 {
+			s.logger.Debug("file size changed mid-read, retrying",
+				"path", absPath, "attempt", attempt+1)
+			time.Sleep(syncRetryDelay)
+		}
 	}
 
 	key := s.redisKey(absPath)
 	if err := s.redis.HSet(context.Background(), key,
 		"filename", filepath.Base(absPath),
-		"size_bytes", strconv.FormatInt(info.Size(), 10),
+		"size_bytes", strconv.FormatInt(int64(len(data)), 10),
 		"mtime", strconv.FormatInt(info.ModTime().Unix(), 10),
 		"content", base64.StdEncoding.EncodeToString(data),
 	).Err(); err != nil {
